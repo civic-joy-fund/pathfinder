@@ -2,6 +2,689 @@
 
 All changes are in `index.html` unless noted. `data/streets.json` and `scripts/build_data.py` are unchanged since v1.
 
+## v110
+
+- **Your files draw the way Airmapper does.** Each row now takes its shape column first, then its CNNs, then its latitude and longitude. A row with CNNs and lat/lon but no shape draws as its streets (and corners), not a dot. When there are no CNNs it falls back to the shape or the point. The rule comes from [airmapper-lib](https://github.com/burritojustice/airmapper-lib) (`geometryOf`), the same code Airmapper uses, loaded from jsDelivr with a copy in `vendor/airmapper-lib.js` in case jsDelivr is down.
+- **Points stay points.** City files that have lat/lon and one CNN per row that many rows share (street trees, businesses, 311 calls) still draw as points: that CNN is the block a point is on. CNNs come first only when a row lists several, or nearly every row has its own.
+- **Location from → CNNs (street lines and corners)** is a new choice in a file's Format when it has a CNN column. Pick latitude / longitude to go back to points.
+- **Show as: Auto · Shapes · Dots** in a file's Format, for files with lines or areas. Auto (the default) shows a dot for each line or area when zoomed out past 12, and the shapes from zoom 12 in, like Airmapper. Dots hover and click like the shapes. Points don't change.
+- Intersection CNNs now draw as corners alongside the blocks in the same row (before, a row with both drew only the blocks).
+
+## v109
+
+Includes v108 (#97).
+
+- **One page, several sites.** Copies of Block Party on other sites now run this same file unchanged; what differs is set in `SITES` at the top of the script and picked by the page's address. `?site=pathfinder` shows any copy as Pathfinder, for checking.
+- **Pathfinder** (Civic Joy Fund's copy, civic-joy-fund.github.io): named Pathfinder with the Civic Joy logo, Ride turned off, and two files on the map when it opens: Block Parties 2026 and Green Infrastructure (`sites/pathfinder/`, people's names left out). Block Party here is unchanged.
+- Features can be turned off per site (`FEATURES`; only Ride so far): the button goes, an unfinished ride isn't offered back, and GPX files aren't offered as rides.
+- **Files with blocks and intersections in one column** (like the Block Party 2026 export, with LINESTRINGs and POINTs in `wkt`) now draw as lines where they have them, instead of falling back to each row's latitude and longitude.
+- Files that come back from a link (or a site) no longer pop up the "what next" note each time the page opens.
+
+## v108
+
+- **Smaller map toolbar.** On computers, the buttons along the top of the map (Map · Sat · 3D, Layers, Areas, Filter, Ride, Focus, Nearby, Table) are about a quarter smaller, so they fit on one row at most window widths instead of wrapping onto a second. Phones keep their larger, finger-sized buttons.
+
+## v107
+
+- **Connect follows your GPS trace.** On a ride (or a saved ride opened with its trace), a gap's Connect button joins it along the trace you rode instead of a straight line. Where the trace runs along an OSM path or an SFMTA bike path for 12 m or more, keeping within 7 m of it and heading its way, that stretch goes in as the path, with its name; the rest goes in as "Along your trace". Short bits like Page St's path across Kezar Dr come in this way, even though they're too short to be added while riding.
+- If there's no trace near both ends of a gap, or the trace wanders far off between them, Connect draws a straight line as before. Connect all does the same for every gap.
+
+## v106
+
+- **Rides pick up stretches of long paths.** A bike path or OSM path longer than 150 m used to be added only once you'd ridden half of it, so a block of the Panhandle path (one 754 m line in SFMTA's data) never made it in. Now the stretch you actually rode goes in as a piece once it's 40 m long and you've moved on from the path. Paths you ride most of go in as the part you rode, not the whole line. Streets keep the half rule.
+- **Pieces stay in the order ridden.** A path piece that finished loading or was added after you'd moved on could land before an earlier one; each piece now remembers when it was ridden and goes in its place.
+- Tested by replaying your Castro St to Oak St ride: the Panhandle stretch from Baker St now shows up (Fell St → Panhandle bike path → Lyon St path → Central Ave), in order.
+
+## v105
+
+- **A saved ride gets its list of streets again:** its own tab, one row per street, each with the `gps_polyline` of the stretch you rode on it, as well as its row on Routes with the whole trace and the marks. v103 dropped the tab along with the separate trace and marks tabs; only those two stay gone.
+- Updating a ride saved with v103 or v104 (which have no tab) adds its tab.
+
+## v104
+
+- **OSM paths have a pattern of their own:** a trail's dash-dot (— · — ·), on the map and in the map key and Route panel. SFMTA bike paths keep their long dashes, so the two no longer look alike with only the outline color to tell them apart.
+
+## v103
+
+- **A ride is one row on Routes.** Saving a ride no longer makes a route tab, a marks tab or a trace tab. The Routes row has everything:
+  - the link (every street and piece, in order) and `route_polyline` (the matched route);
+  - `trace_polyline`: the GPS trace, as a 6-digit polyline with the seconds since `trace_start` as a third value for each point. That's about 4.5 characters a reading, ~22 KB for an 82-minute ride, in one cell. A ride over about 3 hours carries on into `trace_polyline_2` and `_3`.
+  - `marks`: every 👍 / 👎 / note with its time, lat/lon and CNN, as JSON;
+  - `route_id`, so **Update** finds the row again.
+  A selection or a drawn route still gets a tab with one row per street.
+- **Open a saved ride from the sheet.** Picking the project sheet in Google Drive lists its saved routes and rides, newest first. Opening one brings back its streets and pieces, draws its trace and marks under them, and makes Save → Update write that row again, keeping the ride's columns when there's no ride on that device.
+- **Each street's own GPS:** exports (Copy CSV / JSON, downloads) get `gps_polyline` on every ridden street: the readings taken while on it.
+- **Bigger keys in the Route panel:** the line samples are twice the size and longer.
+- v100's trace and marks tabs wrote their times as dates in January 1970 (seconds read as milliseconds); fixed where they're still read.
+
+## v102
+
+- **The source key in the Route panel is the right size.** Its line samples took the panel's full width; they're now the same small swatches as in the map key.
+
+## v101
+
+- **Connect all works again.** On a route with one of the streets missing corner ids (fixed in v100), it tried the same gap 50 times, said "Connected 50 gaps" and added nothing. Now it skips a gap it can't join and counts only the ones it connects.
+- **Where each part came from, on the map:**
+  - Pieces are labelled along the line in their source's color: "SFMTA bike path", "OSM · Page Street", "GPS stretch", or the connector's length.
+  - Hovering a piece shows its source, name, cross streets and length.
+  - Each Connect button says what it joins ("OSM · Footpath → Ridden street").
+- **A key in the Route panel:** under Show source, the same rows as the map key (each source, how many, how far), so SFMTA bike paths and OSM paths can be told apart without opening the map key. They're named "SFMTA bike paths" and "OpenStreetMap paths".
+- **Focus → Route / ride:** only the route's own parts take clicks and hovers. Streets, corners and the OSM and bike layers pause, so you can look around without adding or dropping streets.
+- **The Ride bar says what you're on**, in a colored chip: City street, a bike lane along it (SFMTA's class in words: bike path, bike lane, bike route, separated bikeway), an SFMTA bike path with no street, or an OSM footpath, alley or service road.
+- The map key's OSM row is brown, to match the map.
+
+## v100
+
+- **Save again updates the same route.** After a save, Copy / Save and the Ride bar show **Update “<tab>”**. It writes over that route's tab, its marks and trace tabs, and its row on Routes, instead of adding new ones. That covers connecting gaps after a ride, on the phone or later on a computer: a route opened from a Google Sheet updates the tab it came from. Its ride columns (time, km, climb, thumbs) are kept when the computer has no ride of its own.
+- **The GPS trace is saved.** A ride's save adds a "<route> trace" tab: every reading, with time, lat/lon, accuracy and elevation (a file Block Party can replay), and `trace_tab_link` on Routes. Opening the route from that sheet draws the trace (dotted blue) and the 👍 / 👎 / notes under the route.
+- **A ride's marks go only with its own streets.** Before, any save made while a ride was still kept in the browser got that ride's marks and totals, even with nothing selected ("Blank route test"). A save with nothing selected now says so and saves nothing.
+- **Close clears the ride from the map.** The trace stayed drawn after Close.
+- **Opening a route from a file turns the file's own drawing off,** so it no longer covers the route. Its box in the map key brings it back. A saved route's trace and marks tabs aren't offered on their own in the tab picker; they come along with the route.
+- **OSM paths are brown,** so they don't look like SFMTA's green bike lanes, on the map and in Show source.
+- **Streets with no corner ids:** 781 streets in the data (Presidio, Treasure Island, a few downtown, like McAllister between Laguna and Webster) have 0 at both ends. They were all treated as meeting at one corner, which made a 0 m gap with hundreds of streets in your ride and could upset between-streets lookups and dead ends. Each such end now takes the real corner within 15 m, or one of its own.
+
+## v99
+
+- **Between two cross streets stops at them:** picking a street "between" two cross streets added blocks past both ends on long runs. Divisadero between Haight and Clay gave Duboce to Pacific; Fillmore between Eddy and Broadway gave Golden Gate to Green; Mission between 16th and 24th gave 15th to 25th. The room left for divided streets and alley-split blocks grew with the length of the run; it's now a fixed amount, and no counted block may reach past either end. Both halves of divided streets (Dolores, Van Ness, Park Presidio, 19th Ave) still come in.
+- **Supervisor districts start off.** Turn them on in Areas ▾. Links that turn them on (`areas=sup:borders`) still do.
+
+## v98
+
+- **Import / show layers is always there:** the panel (renamed from Import, since what you bring in is now a layer) sits right under the search, whether or not anything is selected. Before, it only showed after you picked something, even with files loaded.
+- **Copy / Save and Select blocks show greyed** when nothing is selected, with a note ("pick streets first"), so you can see they're there. They come alive once you pick a street.
+- **Highway shields are hidden** (#76), as in Selecter and Joiner. A new "Highway shields" box among the basemap checkboxes in Layers ▾ brings them back. Reset the map hides them again.
+
+## v97
+
+OpenStreetMap paths (#69).
+
+- **OSM paths layer:** in Layers ▾, with Muni, bike lanes and Slow Streets. It's from sf-blocks' OSM run of 2026-11-10 and shows from zoom 15.
+  - It shows only paths that run along no city street: footpaths, bike paths, alleys, service roads and the like. Steps show as short dashes.
+  - **Paths** (the default) leaves out sidewalks and crosswalks; **All** includes them.
+  - Credited "© OpenStreetMap contributors".
+- **Click an OSM path** to add it to the selection as an **OSM path** piece. It gets its name, or its kind ("Footpath"), its whole line (not just the part on screen) and its OSM id. Exports get an `osm_id` column, and Show source draws it with a teal edge and long dashes.
+- **Ride uses OSM paths:** when you're on no street and no bike path, Ride matches the OSM paths around you (sidewalks, crosswalks and steps aren't used). A covered path goes in the route where you rode it. An off-street stretch is now only for places with no street, bike path or OSM path.
+
+## v96
+
+Ride follows the SF bike network (#64).
+
+- **No more freeway ramps:** Ride never matches a freeway or a ramp. At Cesar Chavez and 101, the bike path under the freeway used to land on "Hwy 101 S On Ramp".
+- **Bike lines first:** Ride matches the bike network's own lines as well as streets, and the nearer one wins (a bike line by up to 2 m).
+  - A bike lane on a street (its CNN, running along it) credits that street, as before.
+  - A path with no CNN, or one whose CNN street is somewhere else (the path under 101 is 96 m from its Bay Shore Blvd line), is added as a **Bike path** piece. It uses the bike network's line, not your GPS trace, so it's clean and joins the streets at its corners.
+  - Off-street stretches are left for places with no street and no bike path.
+- **Replay a ride:** open a GPX file, or a CSV with lat, lon and time columns, and Block Party offers **Replay it as a ride**. It plays the readings through the same matching and turns the file's own markers off so you can see the result. Three sample rides are in `tests/rides/`.
+- **GPX files** open like any other file: their track points become rows with lat, lon, time and elevation.
+
+## v95
+
+- **Show source:** a switch under "This is a route" (None, By color, By pattern, Color & pattern) shows how each part of the selection got there.
+  - **Color** is a thin edge saying whose data it is: yellow for streets you picked, blue for streets from a ride and GPS stretches, green for bike paths, purple for connectors, orange for lines from your files.
+  - **Pattern** is the line itself, saying how it matched: solid for a city street with a CNN, long dashes for a path with its own id, short dashes for something placed by hand, dots for GPS only.
+  - A white line under each part keeps it off the map's own colors.
+  - With nothing chosen, a selection with more than one source shows color and pattern, and a plain list of picked streets looks as before. Your choice is remembered.
+  - The map key lists each source in the selection, with how many parts and how far.
+- **While riding:** the street you're on fills in pink as you cover it, so you can see when it's about to be added (at half).
+- **Saved routes keep their sources:** export rows get a `route_source` column (ride, picked, bike, hand, trace, file), and links keep which streets came from a ride (`rs=`).
+- **Open a saved route as your route:** opening a CSV or sheet saved from Block Party now offers "Open it as your route". It brings back the streets and pieces in order, with their sources, and turns on "This is a route" when the rows join end to end.
+- **A spinner while Google is slow:** opening a sheet from Google Drive shows each step (signing in, opening Drive, reading the file, finding places) with a spinner, and so does loading a link.
+
+## v94
+
+Steps 1 and 2 of the plan (#70), and route lines saved as polylines.
+
+- **Connect a gap with one click:** each dashed red gap on the map has a red "Connect · 67 m" button. It puts a connector there: a straight line between the two loose ends, in the route right after the street it leaves from. A "Connect all gaps" button sits above the cards. A connector is a piece like any other: dashed on the map with its length, its own card, counted in the route's length, and removed with its ✕.
+- **Bike paths with no CNN:** click one of the bike network's 166 paths that has no city street (park paths and the like) to add it to the selection as a "Bike path" piece. Click it again to take it off. A street under the click still wins.
+- **Polylines (6 digits):** every row in CSV, downloads and Sheets now has a `polyline` column: its line as an encoded polyline at 6 digits (polyline6, as Valhalla and OSRM use). For a route, each row's line runs the way the route goes and starts where the row before ended, so the rows join up end to end. The Routes tab in Sheets gets `route_polyline`, the whole route as one line.
+- **Links:** a connector between two corners goes in the link as `x:<corner>-<corner>`, in its place along the route. Other pieces go in `pc6=` at 6 digits; links from v91–v93 (`pc=`, 5 digits) still open. Links now follow the order of the cards.
+
+## v93
+
+- **Layers works again during and after a ride:** the Ride bar was drawn over the open Layers menu, so clicks on most of its buttons went to the bar instead. It stays up after Stop until you press Close. An open menu (Layers, Areas, Filter) now sits above the Ride bar, Nearby and the tips.
+- **Fewer redraws at load:** the cards were redrawn about 45 times in the first seconds after opening a link with streets. Each loader (Muni and bike, Next to, groups, districts) redrew once for every draw that had happened while it loaded. Now each redraws once, about 8 redraws in all.
+
+## v92
+
+- **Softer corners:** buttons ("Reset the map" was nearly a circle), toasts ("Found you") and the "Not following you" pill have 12 px corners instead of fully round ends.
+- **Ride notes stay open:** the note box no longer closes while you type and keep moving. The bar updates only its numbers until you save the note (or press Esc).
+- **A flag for notes:** ride notes show as a yellow flag on the map; 👍 and 👎 stay green and red dots.
+
+## v91
+
+Step 1 of the plan for gaps and paths: **pieces**, parts of a selection that aren't city streets.
+
+- **What a piece is:** a line in your selection that isn't a city street: a park path, a plaza, a stretch ridden off the street grid, or a line from one of your files. It gets a card with a dashed edge, a kind tag, where its ends are (at a corner, or "near" one), its length, slope and elevation profile, and a Street View link. On the map it's a dashed line, and clicking it opens its card.
+- **In a route:** pieces are checked, numbered and counted in the route's length like streets. An end at a street corner joins the streets there, so a path between two streets closes the gap instead of showing one.
+- **Where pieces come from (for now):**
+  - **Riding:** a stretch of 40 m or more off every street (cutting through a park, say) becomes an "Off-street stretch" between the streets on either side. It reaches to the corner it left from and the one it rejoins.
+  - **Your files:** picking a line that has no CNNs adds it as a piece (lines with CNNs still go on their street's card). Picking it again takes it off.
+- **Links, exports, Sheets:** links keep pieces in their place along the route (`cnn=…,p0,…&pc=…`). CSV, downloads and Sheets get a `piece` row with its kind, ends, length, slope and line, in route order. The Routes row in Sheets counts them.
+- **Ride bar on phones:** 👎 is on the left, 👍 on the right.
+
+Next: one-click connectors from gaps, then saving routes in order, drawn lines and OSM paths, all as pieces.
+
+## v90
+
+Ride, after the first real rides:
+
+- **Ride stats:** the Ride bar shows ride time (stops over 30 seconds and pauses don't count), distance, average speed, and climb and descent. When you stop, it also shows the elevation along the ride.
+- **Per street, in saved files:** each street gets when you got there (`ride_at`), how long you were on it (`ride_seconds`), your speed (`ride_kmh`) and how much it climbed the way you went (`ride_rise_ft`), plus 👍 / 👎 counts and notes. This goes into CSV, downloads and Sheets.
+- **👍 and 👎:** two big buttons on the Ride bar mark the street you're on. Each mark and note keeps its time, lat/lon and street (CNN). They show as green, red and yellow dots on the map, on the street's card, and in a "marks" tab when saved to Sheets. The Routes row gets the ride's time, distance, speed, climb, descent and mark counts.
+- **Stop asks to save:** the bar stays open with the totals, a name made from the first and last streets ("Valencia St to 21st St"), and Save to your last project, a new project sheet, another project, or Download CSV. Close puts it away, and it's still there after a reload until you close it.
+- **Follow is obvious:** once you pan, an orange "Not following you · tap to follow" pill shows over the map, the bar gets a big Follow me button, and your dot goes hollow. While following, the ◎ button is blue.
+- **Phones:** Ride and Nearby are their own buttons next to ☰. While riding, Ride turns blue ("● Riding"); tapping it shows or hides the bar.
+
+## v89
+
+- **🚲 Ride:** turn it on (toolbar, or ☰ on a phone) and the streets you ride along go into a route, in the order you ride them.
+  - It follows your location and keeps the screen awake. On a phone the map goes full screen and zooms in.
+  - A street is added once you've covered about half of it, moving along it (within 15 m, heading within 35°). Crossing streets at corners don't count, so they aren't added.
+  - The street you're on is lit in yellow, and your track is a dotted blue line.
+  - The bar over the map shows the count and distance, and the street you're on. It has **＋ Add this street** / **− Take it off**, **✎ Note**, **Pause**, **Stop**, and **◎ Follow me** after you pan the map.
+  - **Notes** go on the street's card and into Copy / Save, downloads and sheets (a `note` column). Adding a note also adds that street.
+  - The ride is kept in this browser: after a reload or a crash, you're asked whether to carry on.
+  - A web page can't follow you with the screen off, so keep the phone mounted and the page open.
+
+## v88
+
+- **Closed cards read better:** under the street name, the cross streets are in bold with the address range in front ("600–649 · 18th St to Hancock St"), and the street type tag sits below them.
+- **A bigger ▸** on closed cards.
+- **More numbers when they fit:** Compact cards show allows up to six. New choices are Supervisor district (D8), ZIP code and neighborhood (from the set chosen on cards). The numbers wrap onto more lines, and phones still show the first two. Muni stays blank until the Muni routes have loaded, instead of saying "no Muni".
+- **Copy / Save, Import and Select blocks sit above "Your selection"**, so the list starts right under its heading.
+
+## v87
+
+- **Compact cards, one open at a time:** with more than one street, closed cards are one line: the street, its type and cross streets, and a few numbers.
+  - Clicking a card opens it, zooms the map to it and folds the one that was open. Clicking the open card's top line folds it too.
+  - A street you add from the map opens, so collecting streets on a ride keeps the newest one in view.
+  - **Open all** shows every card in full, as before; the choice is remembered.
+  - **↑ / ↓** move between cards and **Enter** opens one.
+- **Compact cards show ▾:** pick up to three numbers for closed cards: slope, homes and businesses to start, or trees, length, Muni, people or zoning. Phones show the first two.
+- **Street type under every name:** the city's class (Residential, Collector, Arterial, Major street, Freeway, Freeway ramp). When the city gives none, a dashed tag says what kind of street it is instead: Private, Not city maintained, Paper street, Pedestrian or Retired. That covers every current street.
+- **Routes number their cards** (1, 2, 3…) in route order.
+
+## v86
+
+- **Projects in Google Sheets:** a project is one sheet with a **Routes** tab and a tab for each route or list you save.
+  - **New project sheet** (name it, or it's dated) starts one. **Add to “…”** puts the next route in the last project you used, and **Add to a project…** picks any other.
+  - Each save adds a row to Routes: the name, route or list, street count, gaps, length, date, the tab's name, a link to the tab, and the Block Party link.
+  - The tab link uses the tab's id, so it still works after you rename the tab. The Routes tab is found by its id too, then by its name.
+  - Name boxes: one for the route or list, one for a new project.
+- **Saving says where it went:** "Saved 16 streets to “Mission rides”, tab “Valencia ride”." shows as a message and under the buttons, with a link to open the tab.
+- **Gaps in a route are rows** in Copy CSV / JSON, downloads and sheets. Each gap sits right after the street it leaves from, with its length, its two corners and a line between them. A route's `order` counts the gaps too, so the rows read along the route.
+- **Street View:** each card's length line has a **Street View ↗** link that opens Google Street View in a new window, standing mid-block and looking along the street. The table and exports have a `street_view` column with the same link.
+- **Filter → Alleys:** streets named as an alley (ALY).
+- **How near:** "This street and the streets at its ends" is now **Around the corner(s)**.
+- **Import under Copy / Save:** the sidebar has its own Import panel, the same as the one in Layers, listing the files you've brought in (with ×). The count shows on the folded panel.
+- **Business kinds note:** the business map key and Nearby's kind chips say the kinds come from self-reported NAICS codes, which are sometimes wrong.
+
+## v85
+
+- **A business from search shows its whole registration:** the place card now has the owner, mailing address, license, industry and start date. Clicking the pink pin on the map opens the same record.
+- **"Here since" stands out:** every business record (on the map, on cards and in search) shows its start date in a yellow badge near the top, with how long ago that was ("Here since 2019-06-28 · 7 years").
+- **Where am I, on any screen:** a new ◎ button with the map controls finds you (computers use Wi-Fi location) and shows the blue dot. Nearby can then start from "Near me".
+- **How near, in plain words:** streets are streets and blocks are assessor blocks now.
+  - This street (both sides) · This street and the streets at its ends · Two streets out
+  - **New:** The assessor blocks it touches (a street: the blocks on both sides; a corner: the four blocks around it; a place: the block it's on), and Those assessor blocks and the ones around them (about nine for a place mid-block).
+  - Cards say "on this street", "at the end of this street", "2 streets out" and "assessor block 3608".
+  - The streets counted are drawn a little stronger on the map.
+- **Nearby businesses by kind:** checking Businesses in Nearby shows Food & drink, Retail, Services and Everything else, so you can look for just one or two kinds.
+- **Nearby table and map, linked:** clicking a match in the table (or the Nearby list) rings it on the map, and the ring stays, panning there if it's off screen. Clicking a match on the map opens its row in the table and marks it.
+
+## v84
+
+- **Phones: one ☰ button** at the top left, with no word next to it. Nearby moved into the ☰ menu with the rest.
+- **Full screen and 3D sit under the zoom buttons**, the same size as ☰ on phones (bigger for fingers). Full screen uses corner-arrow icons: pointing out to fill the window, pointing in to leave.
+- **3D in one tap:** the new **3D / 2D** button tilts the map over the hills, or lays it flat and seen from above (with the hills turned off, which is lighter). 3D is on by default on phones again.
+- **Routes:** with **This is a route** checked, each street's end dots shrink to small dots, tiny when zoomed out, so the line reads as one route. The page link keeps `route=1`.
+- **Filter → angles:** each street's direction now runs from the corner to the block's other end, so the curve where a divided street splits around an island no longer sets the angle. The drawn legs follow the same directions. The intersection's popup sits beside the corner, in the widest gap between the streets, so it doesn't cover the legs or the angle.
+- **Save to Google Sheets** (Copy / Save → Save to): **New Google Sheet** makes a sheet in your Drive; **Add to a sheet…** adds tabs to one you pick. You get a Streets tab (the same columns as Copy CSV) and an About tab (name, whether it's a route, counts, link, date). For a route, an `order` column gives each street's place along it, and About has the length and the number of gaps. The name box is optional.
+- **Save to Airtable is wired in but off.** It turns on when `CONFIG.AIRTABLE_SAVE` names a table and which of its fields get which columns, and it writes one record per street.
+
+## v83
+
+- **Cards fill in at once** from sf-blocks' new street facts (`data/facts/streets.json`, 0.47 MB gzipped, worked out ahead of time with the same rules as the cards): lots, homes, zoning and land use, street trees by name, how many businesses and at how many addresses, and people and homes from the census. Before, every card read its own parcel and point tiles first.
+- **Tiles only when needed:** opening a card's business list reads the tiles for the names (and rings them on the map, as before). Lot outlines, intersections (half of each street) and saving an area's outline still read the tiles.
+- **Growing the selection** ("Add the streets around") uses each street's lot ids from `data/facts/lots.json`, loaded the first time you grow, instead of reading the parcel tiles for every street nearby. It's about twice as fast in testing.
+- **Lots with a letter** (like 4207014B) now count toward their assessor block when growing the selection; before, they were put on the wrong block.
+- **Phones:** the census estimate shows on cards without loading the census blocks. **Show the census blocks and corners** (under the estimate) loads them for the full breakdown.
+- Backup copies of the facts files are here too, from sf-blocks 2026.11.11.7, so this works before sf-blocks #38 is merged.
+
+## v82
+
+- **Filters no longer turn themselves on after a reload.** The browser was restoring checkboxes from before the reload, sometimes onto the wrong ones. Now Filter only follows the link.
+- **One row of buttons on phones:** **☰ Settings**, **◎ Nearby** and full screen. Settings opens the rest (Map / Sat / 3D, Layers, Areas, Filter, Focus, Table); picking one folds them away again so its panel has room. A small badge on Settings counts the Filters that are on, and Focus stays in sight while it's on.
+- **Full-screen map** (⛶, phones and computers): the map fills the window. Tap ✕ or press Esc to leave.
+- **Nearby shares the screen on phones:** the map gets the top half and the list the bottom half, so you can see what it found. Before, the list covered the map.
+- **Streets first, facts as you scroll:** the streets show on the map and as cards right away. Lots, businesses and trees are read for the first few cards and then for each card as it comes on screen, so a long route doesn't read 80 cards' worth of tiles at once.
+- **Lighter on phones** (to stop the page reloading itself):
+  - The map starts flat; 3D is still a tap away and remembered once you choose it.
+  - Census blocks and tracts load only when asked for: a card shows **Count people and homes**, and picking census blocks or Density in Areas loads them too.
+
+## v81
+
+- **Routes vs. sets of streets:** a **This is a route** checkbox under the list's title. Off (the default), the streets are just a set: no gaps, no length. On, Block Party adds up the length ("9.03 km") and shows gaps, and the page link carries `route=1` so whoever opens it sees it as a route. Start over turns it off.
+- **Gaps only up to 150 m** (was 2 km), and only for routes.
+- **Loading says what it's doing:** loading the city's streets, drawing the map, reading districts and layers, opening the streets in the link. After that, a small pill over the map says what the cards are still reading ("Reading lots 12 / 81 · businesses and trees 30 / 81 · census blocks") and goes away when they're done.
+
+## v80
+
+- **Gaps in a route:** when the streets you've picked don't all touch, Block Party draws a dashed red line across each gap (the shortest hop between loose ends, up to 2 km) with its length, and the count line says so: "80 streets · 1 intersection · 1 gap (45 m)". In your Lake Merced route that's the 45 m between Sloat Blvd (11960101) and Lancaster Ln (8080000).
+- **No cross streets for long lists:** with more than 3 streets picked, cross streets stay off. Check "Cross streets" in the map key to bring them back for that list.
+- **Loading:** a spinner and "Opening 81 streets…" over the map until a long link has drawn (at most 6 seconds).
+- **A long link that includes a corner** now opens as a list ("Your selection") instead of as that intersection with 3rd St in the street box.
+
+## v79
+
+- **Your files say where they came from** (File, Google Drive, Google Sheets link, DataSF, Link, Airtable, From search), and a file's Focus and × stay on one line.
+- **Shapes instead of midpoints:** when a table has a geometry column (`outline_wkt`, `elements_wkt`, `geometry`, "Street WKT"…) as well as latitude / longitude, the shapes win (an outline first). **Format → Location from** switches between them, or back to the points. `GEOMETRYCOLLECTION` reads too (blocks, corners and lots together).
+- **Airtable, two links deep:** linked records' own links come in by name, so the Green Infrastructure geo table now has **Project: Organizations** and **Project: Lead Advocates**, and Projects has the organization of each advocate. A link that only points back to the same table is left out.
+- **Contact fields, when you want them:** **Format → Fields left out** lists the contact fields that weren't loaded (Lead Advocates: Email, Organizations: Contact Email…). Check the ones you need and **Reload with these**. The field names (never the values) are kept in the page link so it reloads the same way; the token still never is.
+- **Top row:** Map | Sat | 3D are one control, and the buttons are a little tighter.
+- **The How near outline goes with its card:** unchecking or removing a street now takes its dashed blue outline off the map.
+
+## v78
+
+- **Address / Places** (the Address button's new name). In this mode the first box finds more than streets:
+  - **Addresses:** "2900 24th St" goes straight to the spot: a **pin**, its **lot** in yellow, and **the street it's on** in your list (like the Address mode). If the number isn't in the city's address list, the closest numbers are offered.
+  - **Lots** by number ("4207-014B").
+  - **Businesses by name** ("taqueria"), storefronts first, with their industry. **All N as a file** adds every match as one of your files, so they're on the map, in the table, and ready for Nearby.
+  - **Industries by NAICS code or name:** "722511" or "restaurants" offers NAICS 722511 Full-Service Restaurants (1,822 businesses), 7225 and so on; picking one adds those businesses as a file.
+  - **Landmarks** (San Francisco City Hall), **schools, clinics, fire and police, city land**, and **your files' rows** by name.
+  - Streets still work: pick one and the Street number box opens as before.
+- A **place card** under the search box: the address or name, lot, land use and homes, zoning, the street it's on, businesses registered there (for a business: owner, industry, and whether it's not a storefront), and **Pick the lot**, **Nearby** and **Copy**. Clear selections and Start over clear it.
+- The address list, business names and NAICS titles come from sf-blocks' new search index (burritojustice/sf-blocks#35), loaded only when you type in Address / Places. Until that's merged the box searches streets only.
+
+## v77
+
+- **Filter draws the angle:** hovering a magenta ring draws each street leaving the corner (the first 25 m, which is what's measured), shades the sharpest corner between two different streets and labels it in degrees, with a dashed 90° to compare. Mission & Valencia reads 30°.
+- **Filter speaks in corners:** the slider is now **A corner sharper than …°** (20° to 80°, 50° to start), and the hover says "sharpest corner 30°" instead of degrees off square. The angle is now the corner you'd see standing there (between two streets' legs), so a Y where streets meet at a wide angle no longer counts as sharp.
+- **Nearby starts with only your files checked.** Neighborhood groups, Community Benefit Districts and Cultural Districts are no longer checked to start.
+- **Nearby table:** the first column says what it is ("Painted Safety Zones (starting places)"); count columns have the list's color and a name that wraps, so they're narrow; hovering a header says what the number means ("How many Businesses each starting place has (Within 200 m)"); a **Total found** column.
+- **Hover to find it on the map:** hovering a starting place or a match in the Nearby table, or a match in the Nearby panel's list, rings it on the map.
+
+## v76
+
+- **Clearing Nearby:** a **Clear** button in the Nearby panel's results and in the table's top row. It takes the rings off the map, the How near area, and the table's Nearby rows, and stops following Near me.
+- **Removing a file asks first** and says what goes with it: the file comes off the map, key and table; how many of its rows you picked onto cards; Nearby results that use it; Focus on it. Removing it now also clears those Nearby results (before, the rings and neighborhood area stayed on the map).
+- **What the buttons do** (also written out under Options):
+  - **Clear selections:** unpicks the streets, intersections, blocks and file rows you picked, and clears Nearby results. Your search, files and map stay.
+  - **Start over:** does that, and also empties the search, turns off Filter and Focus, and zooms back out. Your files and map layers stay.
+  - **Reset the map** (Options, and the old Reset view button in Layers): layers, areas, border styles, basemap, 3D, Filter and How near back to how they start. Border styles were the part that used to come back after a reload; now they don't. Your files and picks stay.
+- On the Nearby map, a place found from several starting places is drawn once (in one test, 120,548 rings became 28,135).
+
+## v75
+
+- **Airtable** in Import (the button was a placeholder). It opens a box with:
+  - **Personal access token**: on its own, Open lists the bases the token can read; open a base and pick a table, or one of its views.
+  - **Table or view (optional)**: paste an Airtable link, or just a path like `app…/tbl…/viw…`, to open that one directly.
+- The table comes in as one of your files. Linked records come along as "Link: Field"; when linked records have WKT or CNNs (like the Block Party geo tables), the row is placed by them.
+- Contact fields (email, phone, addresses, attachments, Airtable users) are never requested; a toast says which were left out.
+- The token stays in this tab only, goes only to Airtable, and never goes in the page link. The page link carries the table (`url=airtable:app…/tbl…/viw…`): in a tab that has the token it reloads the table; in a new tab it asks for the token.
+
+## v74
+
+- **Filter → Intersections** (new):
+  - **T intersections:** where only three streets meet, like Clarion Alley at Mission or Valencia (about 3,400 in the city; "Residential streets only" narrows them).
+  - **Streets meeting at an angle:** intersections where two streets cross at least so many degrees off square, with a slider from 10° to 70° (40° to start). San Jose & Guerrero (79°), Tiffany & Duncan (68°), Mission & Valencia (60°) and Market & Church (62°) all show up; ordinary grid corners don't.
+  - Matches are magenta rings. Hover one for how many streets meet and how far off square it is; click to add the intersection to your list.
+- **Focus is always there:** the Focus button opens a menu of what clicks and hover go to: Everything, Streets, Intersections, Businesses, Street trees, Schools/clinics/stations (when shown), Lots, or one of your files. While focused the button turns black with a ✕; Esc also ends it. Focusing on lots turns Parcels on, and off again after.
+
+## v73
+
+- **Select blocks:** picking parcels turns on the Parcels layer; picking another kind of block, or turning picking off, now turns it back off (if picking turned it on).
+- **Nearby table:**
+  - Opening a starting place shows one folded line per list, with a count. Open a list's line to see its matches.
+  - Your files come first, then Block Party's layers.
+  - The table's top row has the **How near** menu and **Copy / CSV / JSON / GeoJSON view** for the whole table. Each opened place also has **Just this one: Copy / CSV**.
+- **The "how near" area shows on the map** for the place you opened (or Near me): the blocks, the neighborhood, or the circle.
+- **Same or touching neighborhood:** a new How near choice that also counts the neighborhoods sharing a border with yours.
+- **Community Benefit Districts and Cultural Districts** are lists in Nearby, like neighborhood groups, checked by default: a place matches the district it's in, with any public contacts from sf-blocks' Cultural Districts list. In the How near menu they (and historic districts) are now last.
+- **Map button:** clicking Map when it's already on opens a list of basemap styles.
+- **Focus:** the bar is gone. Starting focus shows a toast, and a black **Focus: file name ✕** button sits at the top of the map while you're focused. Click it, or press Esc, to go back to streets.
+- **Smaller fixes:** bigger fold triangles; business hover shows the business name first, then its owner, then the address; a file's Focus and × buttons stay on one line; smaller import buttons; the first file's stars are orange.
+
+## v72
+
+- **◎ Nearby** (new button on the map): match one list against others.
+  1. **Start from** one of your files, your selected streets, a layer (schools, clinics, fire and police, city land), or **Near me** (your location).
+  2. **Look for** any of your other files plus businesses, street trees, schools, clinics, fire and police, city-owned land and neighborhood groups. Your files and neighborhood groups start checked.
+  3. **How near:** this block, around the corner, 2 blocks, the same neighborhood (or district, tract…), or within 50, 100 or 200 m. It's the same setting as on cards, and here it applies to businesses too.
+- **Results** open in the table as "Nearby: …": one row per starting place, with a count from each list. Open a row (▸) for its matches, nearest first, with **contacts on screen** (a file's name, email, phone, organizer or similar columns; a business's owner; a neighborhood group's people and emails). Clicking a row zooms to it. On the map, starting places are ringed dark and matches are dots in each list's color; hover one for its name, how near it is and its contact.
+- **Exports:**
+  - **Copy** (tab-separated) and **CSV**: one row per match, with the starting place repeated, which list the match came from, how near (in words and meters), its contact, and every column of the matched row. Starting places with nothing nearby get a row saying so.
+  - **JSON**: grouped by starting place.
+  - **GeoJSON view**: the starting places and their matches, each with a `role` and `list`, for a map of its own.
+- **Near me:** your location is the starting place, and the list shows right in the panel, nearest first. It follows you as you walk (a new search every 30 m). Your location is never saved or put in a link. On a phone the panel is a bottom sheet.
+- **When a file loads,** a note says what came in and offers **Focus on this file** or **◎ Nearby**.
+- **Focus:** a button on each file's row in Layers. While a file is focused, only its points respond to hover and click; streets and corners fade and pause. The dark bar at the top says so, with **Back to streets**.
+
+## v71
+
+- **Cards and the map:**
+  - Hovering a card no longer moves the map; it just highlights the street.
+  - Clicking a card goes to it on the map. Only the checkbox checks or unchecks it now.
+  - Clicking a table row scrolls to its card and flashes it. A file's row goes on the card of the street or intersection it's at.
+- **A Nearby section at the bottom of each card,** under a divider: businesses, your files and neighborhood groups.
+  - Its header has a menu for what "nearby" means for your files: this block, around the corner, 2 blocks, the same neighborhood (or district, tract…), or within 50, 100 or 200 m. This is the same setting as "Nearby on cards" in Layers.
+  - The area it covers is drawn on the map (dashed blue) for the card you're hovering, or the last one you clicked.
+- **Businesses:** the list puts each business's name first, with its address under it. With the list open, the ringed points on the map are labeled with the first name at each address. Hovering one lists the names, and clicking opens their records.
+- **Menus over the table:** with the table open, Layers and Areas sit above it and stop short of it.
+
+## v70
+
+- **Your files on cards: Copy list and CSV.** Under a file's rows on a street or intersection card, **Copy list** copies them as tab-separated rows (paste straight into a spreadsheet) and **CSV** downloads them, like the neighborhood groups and businesses lists. Every column of the file comes along, plus `where` (on this block, on the next street, or how far away).
+
+## v69
+
+- **Words:** a CNN segment is a **street**, an intersection is an **intersection**, and **block** only means an assessor block, census block or tract.
+  - A selection made on the map is **Your selection**, with what's in it underneath ("3 streets · 1 intersection · 2 assessor blocks", or "3 of 4 streets checked").
+  - A street and cross street is just their names ("Valencia St and 14th St"); a range stays "Valencia St between 14th St and Duboce Ave".
+  - Copy and Download call streets `street` (not "block") in the `kind` column.
+- **Copy / Save** is one folded row, closed to start. Copy and Download now include your **picked blocks and parcels**: number, the streets around it, size, people and homes, lots, homes, zoning, land use, businesses and trees, with outlines in GeoJSON. Rows are sorted by kind, streets first. Copy link keeps them too.
+- **Select blocks** (was "Selection: grow, trim, save as an area"):
+  - **Pick** comes first and adds **Parcels**. A parcel card shows its address, land use, zoning and homes. One kind at a time.
+  - **＋ Blocks along selected streets** says which streets ("Fillmore St, Pacific Ave – Clay St"). With Parcels picked, it adds the lots along them.
+  - **Grow** is now **Extend street selections**.
+- **Block and parcel cards** add **people and homes** (a census block or tract's own counts; for assessor blocks and parcels, estimated from the census blocks under them), **street trees** around them and **businesses** inside them, with the same list, Copy and CSV as street cards.
+- **Intersections** no longer list "Blocks leading into it", until that's redesigned.
+- **Areas:** when Borders shows, each section (Elected, Special, Neighborhoods) gets a style row: thin, medium or thick; its own color, dark, gray or orange; solid or dashed; labels on or off. Administrative borders can be dashed too. Remembered in this browser.
+- **Hillshade** has its own On/Off under Contours in Layers (on by default, as before).
+- **Import:** **GeoJSON/CSV**, **Google** and **Airtable** fit on one row, with "or drag & drop. Files stay in this tab; nothing is uploaded" under them. In a Google Sheet's tab list, only the biggest tab with places starts checked, and there's **Select all** / **Select none**.
+
+## v68
+
+- **Blocks are cards now,** in the same list as your streets (the chips are gone).
+  - An **assessor block card** shows the streets around it, with **＋ Add** for the ones not in your list yet; its size in acres; the district it's in; and, from every lot on the block, zoning, the number of lots, homes and land use. Census block and tract cards show their own fields.
+  - The checkbox or × takes a block off. Clicking the card goes to it on the map, and hovering it outlines the block.
+  - The count at the top says how many blocks, and the link keeps them (`pick=ablk:0588;0587`).
+- **No separate picking mode:** choose Assessor blocks, Census blocks or Tracts under Pick, then click inside a block to add it. A click on a street, corner, point or file still does what it always did. Off (or Esc) stops adding blocks; the ones you have stay.
+
+## v67
+
+- **Google Sheets with many tabs:** every tab is read, and a list asks which to add. Tabs with places are checked, and each one you add becomes its own file. Before, only the first tab was tried, and when it had no places the message was hidden behind another.
+- **Column names don't have to be on the top row:** titles and notes above them are skipped, in Sheets and CSV files alike.
+- **Intersections as text:** rows with no coordinates or CNNs are placed at the corner when a column reads like "Mission St & 16th St" ("and", "/" and "@" work too), or when there's a street column and a cross street column. A column called "Location" that holds text instead of coordinates no longer gets in the way.
+- **Shapes:** a new file starts as stars, and each file after that takes the next shape (square, triangle, diamond, circle). A point you've put on a card is highlighted in its own shape.
+
+## v66
+
+- **＋ Blocks along these streets** (under Pick): picks the assessor blocks on both sides of the checked streets (or census blocks or tracts, if you're picking those). Divisadero from Sacramento to Haight picks 38 blocks.
+- **Hovering while picking** shows the block's number and fields, outlines it (picked or not), and highlights its chip and its table row. Hovering a chip or a table row outlines the block on the map.
+- **The middle-of-the-street outline** now keeps blocks whole when a street runs through them (Wilmot St, Orben Pl).
+- **Start over and Clear selections** also clear picked blocks and stop picking, so streets can be clicked again. The Selection panel stays open while you're picking or have picks, even with no streets, and you can save an area from picks alone.
+- **Undo** brings back picks too.
+- **↑ Top and Selection** buttons follow you down a long list of cards.
+- **Shapes** in your files draw 1.8× bigger, so stars, triangles and the rest read like circles of the same size.
+
+## v65
+
+- **Shapes for your files:** Format has a **Shape** row: circle, star, square, triangle or diamond, in the file's color (or its "Color by" colors), with Fill, Ring and Ghost. The map key shows the shape.
+- **Picked areas:**
+  - They're listed under Pick as chips: click one to go to it, × to drop it. The table has them too ("Picked assessor blocks"), with their fields.
+  - **Off** (or Esc) now stops picking but keeps your picks, so you can click streets again. A line under Pick says when clicks are picking. Switching to another kind of area starts over.
+  - **Outline** when saving: **to the middle of the streets around them** (new, the default), **the blocks, streets between them filled**, or **the blocks as they are**. A dashed line on the map previews it. The middle-of-the-street outline uses the street centerlines: each block takes the space inside the streets around it. A block with no street on one side (a park or the bay) is grown about half a street there instead. The saved area records which outline it used.
+
+## v64
+
+- **Table** (new button on the map): your streets and intersections, or any file you've added, as a table under the map, like Joiner's.
+  - Pick which rows at the left. Click a header to sort (again to reverse), search across the columns, and tick **All columns** for everything the CSV download has.
+  - Streets: the checkbox checks or unchecks the street; clicking a row goes to it on the map and scrolls to its card; hovering previews it.
+  - Files: clicking a row goes to it; **Card** puts it on its block's card (or a card of its own).
+  - Drag the bar at the top to resize; the size is remembered in this browser.
+- **Business dots follow the category filter:** with per-category counts from sf-blocks (2026.11.08.1, once the businesses tiles are rebuilt), a dot's size, number and color count only the categories you've picked. Two restaurants at an address with 50 offices make a small food dot under Food & drink, and that address now shows under Food & drink at all (before, it went by the address's one main category). With the current tiles, dots work as before.
+
+## v63
+
+- **Selection panel:**
+  - **↶ Undo** goes back to the streets you had before "＋ Cross streets", "＋ Around the blocks", "＋ Streets around them" or opening an area.
+  - **Show the assessor blocks along these streets** shades the assessor blocks your checked streets' lots are on.
+  - **Pick** assessor blocks, census blocks or tracts by clicking them on the map (yellow); click again to drop one. **＋ Streets around them** adds every street that borders or runs through them. While picking, clicks on the map pick areas instead of streets.
+  - **Save area** uses the picked areas' outline when there are some (else the lots along the streets, as before) and adds `area_set` and `areas` (their numbers) next to the CNNs. Opening that file brings the picks back.
+- **Assessor blocks in Areas** (Administrative: Assessor), loaded only when shown.
+- **Downloads:** pick what goes in with checkboxes (streets, businesses, parcels, census blocks, assessor blocks); a `kind` column says which is which.
+- **Map key:**
+  - Click a category (business kind, tree, city-owned land) to show only that one; click it again to show all but it; click others to add or remove them. The Layers chips follow.
+  - Long file names wrap instead of widening the key.
+- **Import:** files, links and **Google Drive** (the same picker as Matcher; a Sheet comes in under its own name) are folded into an Import row; "Airtable (coming soon)" holds its place. Format has a **Name** box to rename a file.
+- **Cards:**
+  - The checkboxes inside cards (the neighborhood "Map" box, "Show all registrations") no longer sit on top of the card's own checkbox, which was catching their clicks.
+  - Neighborhood groups copy as tab-separated rows, like businesses, and both lists have a CSV button.
+- **Layers:** Street trees moved below Hospitals / clinics.
+
+## v62
+
+- **`scripts/match_blocks.py`** (copied from sf-blocks 2026.11.07.3): "Mt", "Ft" and "Pt" at the start of a street name mean Mount, Fort and Point ("Cayuga and Mt Vernon" was matching Vernon St). "Embarcadero" finds The Embarcadero without a note. A misspelled cross street is looked for among the streets that cross the other one ("Hayes & Octavai"). `--suggest` no longer takes a notes column ("busy", "near school") for locations. Nothing on the page changes.
+
+## v61
+
+- **Selection panel** (under Download): grow, trim and save a set of streets as an area, such as a merchant corridor.
+  - **Grow:** "＋ Cross streets" (as in v60), and "＋ Around the blocks", which adds every street around the city (assessor) blocks your streets face. That gets the backs and corners of the blocks.
+  - **Trim:** click a street on the map, or uncheck its card.
+  - **Save:** name it and save. You get a GeoJSON with the name, its streets' CNNs, and an outline: the lots along the streets joined with the streets themselves.
+  - **Edit:** open a file of saved areas (such as a future sf-blocks merchant_corridors.geojson), pick one, and its streets come back as the selection. Grow or trim, then Save area: it's replaced in the same file, the others kept.
+  - The CNN list is the area, so changing a border is just changing streets.
+- **Downloads:** "Blocks" is now "Streets" (assessor and census blocks are coming), and "All of these" puts streets, businesses, parcels and census blocks in one file with a `kind` column.
+- **Fixes:**
+  - Hovering a category in the map key hid everything; now the hovered category stays and the rest fade.
+  - The key's checkboxes now follow the Layers and Areas menus. A layer or area turned on anywhere is checked, and a row turned off from the key leaves once it's back on.
+
+## v60
+
+- **Map key checkboxes:** every layer, area set and file in the key has a checkbox to hide or show it. A row turned off from the key stays there, unchecked, so it's one click back (layers return to their last setting).
+- **Hover a category to find it:** with a key list open (business colors, tree kinds, land use, zoning, city-owned land), hovering a row fades everything else in that layer.
+- **Downloads next to Copy:** pick what, then CSV or GeoJSON.
+  - **Blocks:** the checked blocks and intersections, with the same columns as Copy.
+  - **Businesses, parcels or census blocks along them:** one row each, with a `cnns` column listing the blocks it's along.
+    - Businesses include owner, industry, license and mailing address, from the city's registry.
+    - Parcels include lot, address, land use, zoning, homes and outline.
+    - Census blocks include 2020 people and homes, with outlines.
+- **＋ Cross streets:** adds the first block of every street that crosses the checked blocks, or that meets a checked corner. On a corridor like Fillmore, the businesses around the corners come along.
+- **Census blocks and tracts can Shade:** Off, Borders, Shade or Density. Shade marks the census blocks along your blocks (the ones the census estimate counts), or the tracts they're in, plus any holding your files' rows.
+
+## v59
+
+- **Map style (Layers › Basemap):** Light (as before), White, Gray, Dark or Black, from Protomaps' styles. The quieter ones let your files' colors stand out. The switch keeps everything on the map, the creek fix included. Saved in the browser, and Reset view goes back to Light. Satellite is unchanged.
+- **New color swatches for your files:** red, orange, yellow, green, blue, indigo and violet, plus aqua and magenta for contrast, and near-black and white (for the dark styles). New files take them in a contrasting order (blue, orange, magenta, green, aqua…).
+- **The Layers menu no longer scrolls sideways:** long column names in Format's menus are cut to fit, Size and Style keep their natural width, and rows with four choices (Parcels) put them on their own line. The map key lists color-by classes as compact dots that wrap. The basemap's Addresses checkbox reads "Addresses (house numbers)".
+
+## v58
+
+- **Your files' rows open full cards:**
+  - Clicking a point or line from your files adds the card for the block or intersection it's on, checked, with the row at the top and a yellow mark. That card has everything any block or intersection card has.
+  - It finds the place by the row's CNN, which can be a block or an intersection (as in Matcher output); otherwise an intersection within 15 m, else the nearest block within 40 m.
+  - Polygons, and points far from any street, keep a card of their own.
+  - Click the row again, or remove the card, to clear it.
+- **Every file lists on every card,** whatever it came from: an intersection-of-interest file and a block-party file now show each other's rows on the cards (e.g. "at this corner", "at Valencia St and 20th St", "on Valencia St"). Rows with an intersection's CNN now count for that intersection and for the blocks that meet there; before, they matched nothing.
+- **"Details"** replaces "Its row". The file's own columns show first. Matcher columns (source_row, matched_text, cnn, wkt, confidence and the rest) and lat/lon columns fold away under their own line. Matcher files without a name column use matched_text as the name.
+- Long values wrap inside the card instead of running onto the map.
+
+## v57
+
+- **`scripts/match_blocks.py`** (copied from sf-blocks 2026.11.05.3) gains `--suggest`: it looks through a CSV's columns and says which hold street names, pairs of streets, or locations, and which options to run with. Matching is unchanged. Nothing on the page changes.
+
+## v56
+
+- **`scripts/match_blocks.py`** (copied from sf-blocks 2026.11.05.1): about 4 times faster with the same answers, and it writes each row as it's matched, so long files don't have to fit in memory. Nothing on the page changes.
+
+## v55
+
+- **A card for your files' rows:** click a point or line from your files (or inside one of their polygons, away from streets) for a card like a block's:
+  - which block it's on, by its CNN or the nearest block within 40 m, with a link to add that block's card;
+  - its elected and special districts, ZIP and neighborhood;
+  - Within a block: the census blocks around it;
+  - its elevation, and its whole row folded underneath.
+  - The pick is ringed in yellow on the map. Click it again or × to drop the card; click the card's top to go to it.
+- **Your files stay clickable close in:** their points and lines are bigger and drawn above the selected blocks and corners, and win the hover and click over an intersection.
+- **Format, per file** (Layers › Your files › Format), from Joiner's "Format features":
+  - color, or color by a column (the most common values, or five classes for numbers), shown in the map key;
+  - size, and size by a number;
+  - style: Fill, Ring or Ghost;
+  - labels from any columns, one line each, from zoom 13, 15 or 17. The name column is labelled until you choose others.
+- **File names wrap** in Layers and on cards, with _ and - shown as spaces, so they don't squeeze the Off/On buttons.
+- **Reset view** at the bottom of Layers puts layers, chips, areas, the basemap checkboxes, 3D and the nearby setting back to how they start, and turns the map north-up and flat. Your files, their formats and your cards stay.
+
+## v54
+
+- **Nearby on cards, one setting for all your files** (Layers › Your files › Nearby on cards):
+  - **Blocks** (the default): rows on this block, or out to "Around the corner" (every block touching its ends) or "2 blocks". A row is on a block by its CNN when the file has a CNN column; otherwise when it's within 30 m of the block's centerline, or its polygon covers the block.
+  - **Area:** rows in the same neighborhood (the set picked on cards), supervisor district, census tract or block, or special district.
+  - **Radius:** 50, 100 or 200 m, for places without a regular street grid.
+  - Each row says where it is: "on this block", "20th St, around the corner", "Mission", "36 m".
+- **Shaded areas follow your files:** with an area set on Shade, the areas holding your files' rows are shaded too, along with the ones your blocks are in.
+- **Links:** paste a link under "Add a CSV or GeoJSON…": a Google Sheet shared "Anyone with the link" (or published), a DataSF dataset, or any CSV/GeoJSON a page may read. Links go in the address as `url=`, so a shared link opens with the same data. An Airtable shared link explains that it can't be read from here.
+- **Neighborhoods on the map (Areas › Neighborhoods):** Off, Borders or Shade, for the set picked on cards (Analysis, SF Find, Planning, Realtor, Who's on First). Changing the set in either place changes both. Cards have a "Map" checkbox next to the neighborhood list to show or hide them.
+- **Intersection cards get the block rows:** census estimates, Within a block, zoning, parcels, homes, land use, street trees, businesses and your files.
+  - Census estimates count halfway down each street from the corner.
+  - Within a block counts the census blocks touching the corner in full (four, usually).
+  - The other rows use the same half blocks: the half of each street nearest the corner.
+- Long file names on cards wrap instead of running over the list.
+
+## v53
+
+- **`scripts/match_blocks.py`** (copied from sf-blocks 2026.11.05) reads street and cross street from separate columns: `--street Street --cross Cross`. One cross street is matched as an intersection, two ("Bush and Sutter") as the block between them. The free-text mode is unchanged. Nothing on the page changes.
+- **Your files:** drop a CSV or GeoJSON anywhere on the page, or use "Add a CSV or GeoJSON…" at the top of Layers, and it shows as a layer in its own color. A CSV can locate rows by latitude/longitude columns, a WKT or "(lat, lon)" column, or a CNN column (one or more CNNs per row, drawn as those blocks). Hover for a row's name and a few fields; click a point or line for the whole row. Each file has Off/On and × in Layers and a line in the map key. Cards get a row per file listing what's within 50 m of the block, nearest first ("on the block" for its CNN or a polygon around it), and Copy includes them. Files stay in the tab: nothing is uploaded, and they're gone on reload.
+- **3D on or off (Layers › Basemap):** On is the default (tilt, terrain, 3D buildings). Off makes a flat map for older devices: no tilting, no terrain loaded, and the 3D button becomes Contours. Saved in the browser. This replaces v52's "Only when tilted", which jumped when tilting.
+- **Basemap addresses:** the basemap's house numbers have their own checkbox. Unchecking Buildings unchecks them too; check Addresses again to keep them for cross-referencing.
+
+## v52
+
+- **Businesses at the same spot:** the city puts many addresses on one point: 1601 Church (Sun Valley Market) and 1603 Church, every suite in an office building, mailbox stores like 548 Market. About half of all business addresses shared a point with another, so one dot hid the others and a click picked one at random. sf-blocks #17 stacks them into one dot (its size and color cover all of them, labelled with the first storefront); hovering and clicking list every address there ("1601 Church St & 1603 Church St · 7 businesses"), storefronts first, and cards still list each business under its own address. Before #17 is merged, hover and click already gather the dots drawn at the same spot.
+- Parcel and card text say "1 home", not "1 homes".
+- **Parcel hover shows the lot's street addresses** from the parcels file ("301–401 Van Ness Ave", or one number), with the lot number under it.
+- **Map key:** the size-and-color note under Businesses wraps instead of widening the key, and Businesses and Street trees show the month of their data ("Data from Nov 2026").
+- **Terrain in 3D (Layers › Basemap):** "Always" (as before) or "Only when tilted", which turns terrain off looking straight down and raises it over the first 20° of tilt so nothing jumps. Saved in the browser, to try out.
+
+## v51
+Includes v48–v50 (#15–#17). The business colors and records need sf-blocks #15.
+
+- **Boundary streets show both districts.** A block was checked at three points on its centerline; when a district line runs down the middle of the street those can all land on one side. Now each point is also checked 12 m to either side, so Waller St (Shrader–Stanyan) shows Supervisor D5 | D8, Guerrero (16th–Camp) D9 | D8, Ocean Ave (Granada–Miramar) D11 | D7, 19th Ave (Taraval–Ulloa) D7 | D4. The same goes for Assembly, Senate, House, BART and special districts. 778 of 17,176 blocks are on a supervisor border.
+- **Shorter card rows:** Elected districts shows the Supervisor chip, with the others folded; Zoning shows the codes ("NCT (22), NCT|RTO-M (1)"), with the names folded.
+- **Land use "Vacant (unverified)":** the 2023 land use marks some lots vacant that aren't, so treat it with caution.
+- **Businesses in four colors:** food & drink, retail, services (hair, nails, repair, laundry…) and everything else, from each business's industry code (sf-blocks #15). Chips and the map key have all four. Landlords registering rentals are hidden with the other non-storefronts until "Show all registrations".
+- **Click a tree or a business** for its full record: a tree's species, trunk, status, planted date, site, caretaker, address and CNN; every business at an address with its owner, mailing address (with city and ZIP), license, industry, and start date. Clicking a point no longer picks the block under it.
+- **Opening a card's tree or business list rings them on the map** (in yellow, with a dot when the layer is off); closing the list clears them.
+- **Layers ▾ → Basemap:** checkboxes for the basemap's places (shops, restaurants, landmarks) and buildings, remembered in this browser.
+- **Map key:** City-owned land opens to list its categories, like Land use, Street trees and Businesses.
+- **"Quiet streets" is now "Filter"**, for more kinds of filters to come.
+
+## v50
+Includes v48 (#15) and v49 (#16).
+
+- **Shorter cards:** rows are one line with a count or summary, and a ▸ to open the details:
+  - **Census estimates** and **Within a block** show just "180 people, 70 homes"; the note and the tables of census blocks are folded underneath (the i button is gone; its table is in the fold).
+  - **Street trees** show "38 (12 kinds)"; the kinds and their counts are folded.
+  - **Next to** shows how many places when there are several.
+  - Open folds stay open when the card redraws. The label column is narrower, so values wrap less.
+- **Layers ▾ is shorter:** the chips for city-owned land, street trees and businesses fold under a line with counts ("11 of 11 kinds · 138,778 trees", "2 of 2 kinds · 100,913 at 69,727 addresses"); the Off / Close up / Always pills stay in view.
+- **Map key:** Street trees and Businesses open like Land use, with each genus or color and how many there are, and what the dot size means.
+
+## v49
+Includes v48 (#15).
+
+- **One drawing order**, bottom to top: the basemap and satellite; shading (population density, shaded districts, land use, city-owned land, building footprints); edges (contours, curbs, lot lines, district and census borders); the Muni band, the street lines, and bike lanes and Slow Streets on them; points (trees, businesses, schools, stations, clinics); your selection (the street, previews, cross streets, chosen blocks, corners); 3D buildings; and every label on top.
+- **Street names above everything else:** the basemap's street and place names used to sit under the density colors, shaded districts, bike lanes and the selection on the map style. Now all labels (street names, business names, Muni route numbers, district names, your blocks' labels) are above the Muni band and bike lanes, on both Map and Satellite.
+- **Your chosen blocks above trees and businesses**, so a row of trees doesn't hide the block.
+- **Layers ▾ in sections:** Getting around (Muni, bike, Slow Streets), On the street (trees, businesses, schools, fire and police, hospitals and clinics), Land and buildings (parcels, city-owned land, buildings, curbs), Terrain (contours).
+
+## v48
+Business names on the map need sf-blocks #15; until then the dots show without names.
+
+- **Hover order:** corners, then points (schools, stations, clinics, trees, businesses), then buildings, then parcels and city-owned land, then street blocks. A tree or business on a parcel or building now shows its own popup; the shapes under it no longer take over. Popups no longer close when they open under the pointer (near the map's edges, or on small dots).
+- **Buildings rise as you tilt:** they start to stand up as soon as the map tilts and reach full height at 45°, in six steps, and they're much more see-through (40%).
+- **Census estimates** note: "2020 census, extrapolated from edges of blocks along street".
+- **Within a block:** a new card row with everyone in the census blocks touching either end of the block, in full: in a plain grid, the two along the block and two more at each corner (six). "About 1,620 people and 800 homes", the neighbors who could see a block party and walk over. The i table lists those blocks too, and exports get `census_within_block_people`, `census_within_block_homes` and `census_within_block_blocks`.
+- **Business names** under the dots from zoom 18 (a person's own name is left off the map).
+- **Zoom level** under the zoom buttons ("z16.4").
+
+## v47
+- **Curbs on by default** from zoom 15 (Always: from 13), in a lighter grey so they don't compete with the streets.
+- **Buildings stand up when the map tilts** (3D, or tilting past the label angle): each footprint rises to its median roof height from the 2010 LiDAR, and lies flat again when you tilt back.
+- **Building height** on hover in feet and metres ("about 39 ft (12 m) tall"), with the data's years.
+
+## v46
+Needs sf-blocks #14 (map layers in `data/tiles/`); until it's merged these layers and rows don't appear.
+
+- **Four new layers** in Layers ▾, read live from sf-blocks' tiles, off at first:
+  - **Street trees** (DPW inventory, current): a dot per tree, sized by trunk diameter, colored by genus (the ten most common, plus Other), with a dark ring for Significant Trees. Chips turn genera on and off. Close up from zoom 15; Always shows a thinned overview from zoom 10. Hover: common and Latin name, trunk, year planted.
+  - **Businesses** (Active Business Locations, current): one dot per address, sized and numbered by how many businesses are there, raspberry for food & drink and violet for everything else (chips for each). Contractors at client sites, parking operators, antennas, ATMs and landlords (sf-blocks' reviewed list) are hidden unless **Show all registrations** is checked. Hover: the address and its first few businesses.
+  - **Curbs and islands** (2016), from zoom 15 (Always: 13).
+  - **Buildings** (2016 footprints), from zoom 15. Hover: height in metres and feet (2010 LiDAR).
+- **Street trees** on cards: "38 (15 Brisbane Box, 12 Sycamore, London Plane, 11 California Sycamore)", the trees the inventory lists for this block's CNN.
+- **Businesses facing this block** on cards: how many, at how many addresses, and how many aren't shown (and of what kinds). Open it for each address and its businesses, with the owner when it's different. **Copy list** copies a tab-separated table (address, business, owner, mailing address, license, since) for a spreadsheet or mail merge; the mailing address is the business's own unless the registry gives another. Businesses count when their address is on this street and inside the block's address range.
+- Copied card text and CSV/JSON exports get `street_trees`, `street_tree_kinds`, `businesses` and `business_addresses`.
+
+## v45
+- **Census estimates** (was "Population"): "2020 Census, extrapolated from the edges of census blocks on both sides of this street". A circled **i** opens how it's worked out: each census block used, how much of its edge this block makes up (in feet), its full people and homes and the share given to this street, with totals for both, and a link to the Census Bureau's statistical safeguards (block counts have noise added for privacy).
+- **Homes on the facing lots** is its own card row: "16 (SF Planning, 2023)". Parcels now just counts the lots. Copied text follows.
+- **Muni route numbers** from zoom 16 again (the bands still start at 15). The checkbox is now in the Muni row of the map key: "Muni routes, [14] numbers". Zoomed out, it's unchecked and greyed until the numbers can show.
+- **One-way** is in the map key only once the arrows are on the map (zoom 16).
+
+## v44
+- **Density in Magma, flipped:** more people is darker, so the lightest class (a pale yellow) sits next to the clear blocks where no one lives instead of jumping out. Viridis and the others are still in the Colors menu, and Flip turns it back.
+- **Hide parks and places on the map:** a checkbox under Density, on by default. While density shows, the basemap's colored land (parks, schools, hospitals) and its places (shops, theatres) are hidden. Piers, runways and plazas stay.
+- **Muni:** the route bands show a zoom sooner (15) in Close up, and the route numbers a zoom later (17). A **Route numbers** checkbox in the map key, under Muni routes, hides them; it's remembered in this browser.
+
+## v43
+Uses the density breaks in sf-blocks #12; until it's merged the same breaks are built in.
+
+- **Density reads more clearly:** the census borders no longer have a white casing (block edges run down the middle of streets, so they looked like doubled roads). The bay and lakes draw over the colors, and blocks where no one lives (parks, water) are left clear instead of the darkest color. The colors are a little stronger (60%).
+- **Same scale as Joiner:** 7 classes, each break double the last (5k, 10k, 20k, 40k, 80k, 160k people per sq mi: a log scale), read from sf-blocks, so the Mission and the Tenderloin no longer share a color.
+- **Population settings** in Areas ▾, under Density: **Colors**, a menu of the Viridis family (Viridis, Magma, Inferno, Plasma, Cividis, Mako, Rocket, Turbo), and **Flip** to run them the other way; **Borders**: Black · Grey · White and None · Thin · Thick, wider as you zoom in (None only with Density). All of them go in the link.
+- **Parcels: Borders**, lot lines without the land use colors. While population density shows, Land use and Zoning turn to lot lines too, over the density colors (hovering a lot still names its use).
+- **Map buttons:** black when on or open, white when off. 3D and Quiet streets are no longer yellow; yellow is for what you pick on the map.
+
+## v42
+Needs sf-blocks #11 (census blocks, and population on the tracts) merged first; until then the Population row and card line don't appear.
+
+- **Population on the Areas menu:** under Administrative, Population (2020 Census): Blocks or Tracts, Off · Borders · Density. Off at first. Density colors every block or tract by people per square mile in Viridis (under 5k to 120k+), with the scale in the map key. It counts as the one shaded set: shading another set turns it back to borders, and the other way round.
+- **Population on cards:** "About 75 people and 25 homes" for each block: the census blocks on both sides of the street, each counted by the share of its outline the block runs along. Rounded, and marked as an estimate. Exports get `census_people_est`, `census_homes_est`, and `census_block` / `census_tract` listing the blocks and tracts on both sides.
+- **Smaller special-district chips:** one line each, a little smaller; a long name ends in "…" with the full name on hover.
+- **One-way arrows** start a zoom level later (16).
+
+## v41
+Includes v40 (#6).
+
+- **Areas ▾ menu**, next to Layers, in three groups:
+  - **Elected districts:** Supervisor, State Assembly, State Senate, US House and BART board, each Off, Borders or Shade. Supervisor borders are on at first. Borders carry both districts' names, one on each side of the line (D8 above, D9 below), so you can read which side is which.
+  - **Special districts (not elected):** Community Benefit, Cultural and Historic Districts. One shows at a time (Off · CBD · Cultural · Historic), as Borders or Shade, with names inside.
+  - **Administrative:** ZIP codes, neighborhoods and census tracts stay on the cards; map layers later.
+- **Shade** tints only the area your checked blocks are in; the rest of that set shows as borders. One set is shaded at a time: shading another turns the first back to borders.
+- **Cards** list every set, whatever the map shows: "Elected districts" chips (Supervisor D8 · Mandelman, Assembly 17, State Senate 11, US House CA-11, BART District 9; a block on a border gets "D8 | D9"), "Special districts" chips (names shortened, the full name on hover), then ZIP code and neighborhood under "Administrative". The copied text and the CSV/JSON exports have every set, in full: `supervisor`, `assembly_district`, `state_senate_district`, `us_house_district`, `bart_district`, `community_benefit_district`, `cultural_district`, `historic_district`.
+- The map key lists each set that's on. Area settings go in the link (`&areas=special:cbd,asm:borders`).
+- Replaces v39's one-set `AREA_LAYERS` (the Community Benefit Districts row in Layers is now under Areas). Backup copies include all eight sets.
+
+## v40
+- **Links with blocks (`#cnn=…`) show all of them:** the map fits the blocks before the terrain under them has loaded, and on hills that left them zoomed in too far, running off screen. Once the terrain is in, the map now measures again and zooms out just enough (moving the map yourself first cancels it).
+- **New sf-blocks data shows up on the next load:** GitHub Pages lets browsers keep files for 10 minutes, so a new boundary set could take that long to appear. `region.json` and `VERSION` are now checked with the server every time, and every other sf-blocks file is asked for with the version in its address (`…?v=2026.10.30`).
+- **Community Benefit Districts in place of Historic Districts** in `AREA_LAYERS` (from `area-test`): a Layers menu row, map key line, card row and export column for sf-blocks' `community_benefit_district` set. The backup copies are now sf-blocks 2026.10.30 and include it.
+- **Favicon:** block-c, a chosen block between two cross streets with a flag on it.
+- The Refresh sf-blocks copies Action uses `actions/checkout@v5` (Node 24).
+
+## v39
+Includes v38 (#3): merging this brings both to `main`.
+
+- **Cross streets can be turned off:** "Cross streets" in the map key is now a checkbox. Unticked, the cyan cross streets and their names hide once a block is checked; while you're still choosing they always show. Remembered in this browser.
+- **Area layers from sf-blocks:** `AREA_LAYERS` (next to the `Areas` module) lists boundary sets in sf-blocks by id. Each one sf-blocks has gets a Layers menu row (off at first), a map key line, a card row when the block or corner is inside one ("Historic district: …", checked at 25/50/75% along the block), and a column in the CSV/JSON exports. Historic Districts is listed and appears once sf-blocks has `historic_districts`. Adding another set is one line.
+- **Favicon:** a chosen block (pink, with the yellow glow) between two corners, with its cross streets, on the ink tile; plus 32 px and Apple touch icons.
+- **Backup copies:** `copy_sf_blocks.py` takes wildcards in `data/sf-blocks.json`, and also copies `data/boundaries/index.json` (needed for area layers offline). The new **Refresh sf-blocks copies** Action opens a PR each Monday when sf-blocks changed (needs Actions allowed to create pull requests in Settings → Actions → General).
+
+## v38
+Builds on v37 (#1): merge that first.
+
+- **"Apply for a Block Party" is off here:** `CONFIG.APPLY.show` turns the button on, for a copy run by a block party fund (civic-joy-fund's). `?apply=1` shows it anyway, for testing.
+- **Where it goes:** `CONFIG.APPLY.url` is the application form, opened in a new tab with the checked blocks filled in: CNNs, street, cross streets, district, ZIP, neighborhood and a Block Party link, as set in `CONFIG.APPLY.params` (Airtable's `prefill_<Field name>` style; the field names are placeholders until the form exists). With no URL, the button shows "Applications open soon" as before.
+
+## v37
+Block Party moves to burritojustice and reads its data from sf-blocks.
+
+- **Data from sf-blocks, live:** streets, map layers, boundaries, parcels and the neighborhood groups list load from https://burritojustice.github.io/sf-blocks/, using the paths in its `region.json`. If the site can't be reached (or a file is missing there), the page uses the copies in this repo, which are sf-blocks 2026.10.27 (`data/sf-blocks.json`). Hovering the title shows the version and whether it's live. `?sfblocks=local` forces the copies.
+- **One list of aliases:** `build_neighborhood_groups.py` is now sf-blocks' copy and reads `data/aliases.json`, so "South Bayshore" and the rest are kept in one place for every app.
+- **Files moved to match sf-blocks:** `layers/` is now `data/uploads/`, and `data/neighborhood_groups.json` is now `reference/neighborhood-groups/neighborhood_groups.json`. `build_layers.py` is sf-blocks' copy; the rebuilt layers are byte-identical.
+- **New intro** listing what the cards tell you, the burritojustice avatar in place of the Civic Joy Fund logo, and the burritojustice.github.io Protomaps key.
+- `scripts/copy_sf_blocks.py` refreshes the copies from a checkout of sf-blocks.
+
 ## v36
 - **Pick the neighborhood set:** in the opened Neighborhood list, click a set (Analysis, SF Find, Planning, Realtor, Who's on First, Streets file) to show that one when the list is closed, with the set's name beside it. Analysis stays the default; the choice is remembered in this browser and applies to every card.
 

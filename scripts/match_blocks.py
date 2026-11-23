@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copied from burritojustice/sf-blocks 2026.10.06. Make changes there, then copy the new version here.
+# Copied from burritojustice/sf-blocks 2026.11.07.3. Make changes there, then copy the new version here.
 """
 Match free-text block descriptions ("Sanchez between 27th St and Duncan", "100 block of Winfield",
 "300 Otsego Ave", "Haight and Masonic") to San Francisco street segments (CNNs).
@@ -7,6 +7,11 @@ Match free-text block descriptions ("Sanchez between 27th St and Duncan", "100 b
 Usage (from the repo root):
   python3 scripts/match_blocks.py applications.csv
   python3 scripts/match_blocks.py applications.csv --column "Block you want to party on" --out matched.csv
+  python3 scripts/match_blocks.py intersections.csv --street Street --cross Cross
+
+With --street and --cross, the street names are already in two columns: one cross street ("Hayes",
+"Octavia") is read as an intersection, two ("Sansome", "Bush and Sutter") as the block between them.
+--cross2 names a column holding the second cross street, if there is one.
 
 Reads data/streets.json (built by scripts/build_data.py). Standard library only.
 
@@ -111,14 +116,18 @@ def split_name(name_words):
     return tuple(name_words), None
 
 
+PREFIXES = {"st": "saint", "mt": "mount", "ft": "fort", "pt": "point"}
+
+
 def base_key(words):
-    """numbers become ordinals so "18" matches "18th"; "st" at the start means Saint"""
+    """numbers become ordinals so "18" matches "18th"; "St", "Mt", "Ft" and "Pt" at the start mean Saint,
+    Mount, Fort and Point"""
     out = []
     for i, w in enumerate(words):
         if re.fullmatch(r"\d+", w):
             w = ordinal(int(w))
-        if i == 0 and w == "st" and len(words) > 1:
-            w = "saint"
+        if i == 0 and len(words) > 1:
+            w = PREFIXES.get(w, w)
         out.append(w)
     return " ".join(out)
 
@@ -139,6 +148,8 @@ class Streets:
             key = base_key(base)
             self.by_base[key].add(name)
             self.by_base[key.replace(" ", "")].add(name)    # "ofarrell", "mission bay"
+            if base[:1] == ("the",) and len(base) > 1:     # "Embarcadero" is The Embarcadero
+                self.by_base[base_key(base[1:])].add(name)
             self.suffix_of[name] = suf
         self.bases = list(self.by_base)
         self._snap_nodes()
@@ -177,7 +188,7 @@ class Streets:
         hits = set(self.by_base.get(key, ())) | set(self.by_base.get(key.replace(" ", ""), ()))
         note = None
         if not hits and len(key) >= 4 and not re.fullmatch(r"\d+(st|nd|rd|th)", key):
-            close = difflib.get_close_matches(key, self.bases, n=1, cutoff=cutoff)
+            close = self.close_bases(key, cutoff)
             if close:
                 hits = set(self.by_base[close[0]])
                 note = f'read "{" ".join(base)}" as "{close[0]}"'
@@ -185,6 +196,21 @@ class Streets:
             same = {h for h in hits if self.suffix_of[h] == suf}
             hits = same or hits
         return hits, note
+
+    def close_bases(self, key, cutoff):
+        """difflib.get_close_matches(key, self.bases, n=1), sped up and with the same answer: a name can
+        only score 2 x shorter / (both lengths) or less, so names too long or short to reach the cutoff
+        are skipped, and each spelling is looked up once."""
+        memo = self.__dict__.setdefault("_close", {})
+        if (key, cutoff) not in memo:
+            if not hasattr(self, "_by_len"):
+                self._by_len = defaultdict(list)
+                for b in self.bases:
+                    self._by_len[len(b)].append(b)
+            n = len(key)
+            pool = [b for m, bs in self._by_len.items() if 2 * min(n, m) / (n + m) >= cutoff for b in bs]
+            memo[(key, cutoff)] = difflib.get_close_matches(key, pool, n=1, cutoff=cutoff)
+        return memo[(key, cutoff)]
 
     def cross_names(self, street):
         """every street that meets `street`, with the intersection nodes where it does. Uses the city's
@@ -557,6 +583,24 @@ def parse(st, raw):
                     r["nodes"] = sorted(nodes)
                     return [r]
 
+    # 4b. one street found and one not ("Hayes & Octavai"): look for the other among the streets that
+    # actually cross it, which allows a looser spelling than a search of the whole city
+    if len(named) == 1 and len(parts) == 2 and "between" not in low:
+        streets, na, p0 = named[0]
+        other = parts[1] if parts[0] == p0 else parts[0]
+        junk = re.search(r"\b(?:start|end|block|county|line|ramp)\b|:", other)
+        for a in ([] if junk else sorted(streets)):
+            b, nb = st.match_cross(a, other)
+            nodes = st.intersection(a, b) if b else None
+            if nodes:
+                segs = [s for s in st.by_street[a] + st.by_street[b] if s["fn"] in nodes or s["tn"] in nodes]
+                notes = [na, nb]
+                if len(nodes) > 1:
+                    notes.append(f"these streets meet at {len(nodes)} intersections; all listed")
+                r = result("intersection", segs, "medium", a, raw, b, "", notes)
+                r["nodes"] = sorted(nodes)
+                return [r]
+
     # 5. just a street name: "Coventry Court", "Rossi Avenue!", "LARCH", or a street at the start of a longer note
     place = re.search(r"\b(?:park|plaza|playground|center|centre|wharf|warf|commons|rec)\b", low)
     first = re.split(r"[.;,!(]|\bit is\b|\bwhere\b|\bwhich\b", low)[0]
@@ -613,60 +657,197 @@ def point_wkt(pts):
     return "MULTIPOINT (" + ", ".join(f"({x:.5f} {y:.5f})" for x, y in pts) + ")"
 
 
+def from_columns(street, cross, cross2=""):
+    """Street names already split into columns -> a description parse() reads: "Hayes & Octavia" for one cross
+    street, "Sansome between Bush and Sutter" for two (in the cross column, or cross and cross2)."""
+    street, cross, cross2 = ((v or "").strip() for v in (street, cross, cross2))
+    if not street:
+        return cross
+    crosses = [c for c in ([cross, cross2] if cross2 else re.split(r"\s*(?:&|/|,|\band\b|\bto\b)\s*", cross, flags=re.I)) if c.strip()]
+    if len(crosses) >= 2:
+        return f"{street} between {crosses[0]} and {crosses[1]}"
+    return f"{street} & {crosses[0]}" if crosses else street
+
+
+OUT_FIELDS = ["source_row", "part", "parts", "matched_text", "type", "cnn", "nearby_cnns", "street", "from_street",
+              "to_street", "address_low", "address_high", "address_ranges", "supervisor_district", "nhood", "wkt",
+              "confidence", "method", "notes"]
+
+
+def describer(column="Block you want to party on", street=None, cross=None, cross2=None):
+    """row -> the description to match: one free-text column, or street and cross street columns."""
+    if street:
+        return lambda row: from_columns(row.get(street), row.get(cross), row.get(cross2) if cross2 else "")
+    return lambda row: row.get(column, "") or ""
+
+
+def match_text(st, text):
+    """One description -> its results (a row naming two blocks gives two). Never raises."""
+    try:
+        results = parse(st, text)
+        cap = "low" if len(text) > 400 else "medium" if len(text) > 250 else None
+        for r in results:
+            if cap and r["confidence"] in ("high", "medium") and r["confidence"] != cap and (cap == "low" or r["confidence"] == "high"):
+                r["confidence"] = cap
+                r["notes"].append("long description; check this is the main location")
+        return results
+    except Exception as e:     # never lose a row
+        return [result("none", [], "none", "", text[:80], notes=[f"error: {e}"])]
+
+
+def output_fields(st, r):
+    """A result -> the output columns it fills (all of OUT_FIELDS but source_row, part and parts)."""
+    segs = sorted({s["cnn"]: s for s in r["segs"]}.values(), key=lambda s: s["cnn"])
+    nodes = r.get("nodes", [])
+    nums = [n for s in segs for n in (*s["lf"], *s["rt"]) if n > 0]
+    if r["from_street"]:
+        f_st, t_st = r["from_street"], r["to_street"]
+    else:
+        f_st, t_st = (segs[0]["f"], segs[0]["t"]) if len(segs) == 1 else ("", "")
+    return {
+        "matched_text": r["text"],
+        "type": "intersection" if nodes else ("block" if segs else ""),
+        "cnn": ";".join(str(n) for n in nodes) if nodes else ";".join(str(s["cnn"]) for s in segs),
+        "nearby_cnns": ";".join(str(s["cnn"]) for s in segs) if nodes else "",
+        "street": r["street"],
+        "from_street": f_st, "to_street": t_st,
+        "address_low": min(nums) if nums else "", "address_high": max(nums) if nums else "",
+        "address_ranges": "; ".join(ranges(s) for s in segs),
+        "supervisor_district": ";".join(sorted({str(s["sup"]) for s in segs if s["sup"]})),
+        "nhood": ";".join(sorted({s["nhood"] for s in segs if s["nhood"]})),
+        "wkt": point_wkt([st.node_xy[n] for n in nodes if n in st.node_xy]) if nodes else wkt(segs),
+        "confidence": r["confidence"], "method": r["method"],
+        "notes": "; ".join(r["notes"])}
+
+
+def match_rows(st, rows, describe, start=1):
+    """Stream rows through the matcher: yields (row number, row, [output columns per location found]),
+    one input row at a time, so a caller can write or show results as they come. `start` numbers
+    the first row, for callers that send a long file in batches."""
+    for i, row in enumerate(rows, start):
+        results = match_text(st, describe(row))
+        yield i, row, [{"source_row": i, "part": p, "parts": len(results), **output_fields(st, r)}
+                       for p, r in enumerate(results, 1)]
+
+
+def manual(st, cnns=(), nodes=(), text=""):
+    """Output columns for a location picked by hand (Matcher's "pick on map"): blocks by CNN, or intersections."""
+    by_cnn = {s["cnn"]: s for s in st.segs}
+    segs = [by_cnn[c] for c in cnns if c in by_cnn]
+    if nodes:
+        segs = [s for s in st.segs if s["fn"] in nodes or s["tn"] in nodes]
+    names = sorted({n for x in nodes for n in st.node_streets.get(x, ())})
+    street = segs[0]["street"] if cnns and segs else (names[0] if names else "")
+    r = result("manual", segs, "high", street, text, notes=["picked on the map"])
+    if nodes:
+        r["nodes"] = list(nodes)
+        r["from_street"], r["to_street"] = " & ".join(names[1:]), ""
+    return output_fields(st, r)
+
+
+PAIR_SPLIT = re.compile(r"\s*(?:&|/|@|\band\b|\bat\b|\bto\b|,)\s*", re.I)
+
+
+def is_street(st, text):
+    """Is this whole value one street's name ("Hayes", "16th St", "Divisdero")?"""
+    if not re.search(r"[a-z]", text, re.I):       # "15" alone is a number, not 15th Avenue
+        return False
+    words = norm_words(text)
+    return 0 < len(words) <= 5 and bool(st.candidates(words)[0])
+
+
+def column_report(st, rows, columns, sample=80):
+    """What each column looks like, from its first `sample` filled values: the share that are one street name
+    (`street`), two street names ("Bush and Sutter", `pair`), and a location the matcher finds with high or
+    medium confidence (`place`, from a smaller sample)."""
+    report = {}
+    for c in columns:
+        vals = [v for v in (str(r.get(c, "") or "").strip() for r in rows) if v][:sample]
+        if not vals:
+            report[c] = dict(filled=0, street=0, pair=0, place=0)
+            continue
+        street = sum(is_street(st, v) for v in vals) / len(vals)
+        pair = sum(len(ps) == 2 and all(is_street(st, x) for x in ps)
+                   for ps in ([x for x in PAIR_SPLIT.split(v) if x.strip()] for v in vals)) / len(vals)
+        # a place is a block, intersection or address found with some confidence; a lone street name
+        # ("near school" finding School Alley) doesn't count. Short values count against it, so a notes
+        # column of "busy", "red zone", "near BART" isn't taken for locations.
+        place = 0
+        texty = [v for v in vals if re.search(r"[a-z]", v, re.I) and len(v) > 4]
+        long_vals = texty[:40]
+        if long_vals and street < 0.6:
+            hits = sum(any((r["segs"] or r.get("nodes")) and r["confidence"] in ("high", "medium") and r.get("method") != "street_only"
+                           for r in match_text(st, v)) for v in long_vals)
+            place = hits / len(long_vals) * len(texty) / len(vals)
+        report[c] = dict(filled=len(vals), street=round(street, 2), pair=round(pair, 2), place=round(place, 2))
+    return report
+
+
+def suggest_columns(st, rows, columns, sample=80):
+    """Recommend how to match a table: {"mode": "columns", "street", "cross", "cross2"} when the street and
+    cross street are in separate columns, else {"mode": "column", "column"}; plus the column_report."""
+    rep = column_report(st, rows, columns, sample)
+    order = {c: i for i, c in enumerate(columns)}
+    best = lambda cs, key: max(cs, key=lambda c: (key(rep[c]), -order[c])) if cs else None
+    streets = [c for c in columns if rep[c]["street"] >= 0.6]
+    crossish = [c for c in columns if rep[c]["street"] + rep[c]["pair"] >= 0.6]
+    out = dict(report=rep, mode="column", column=None, street=None, cross=None, cross2=None)
+    street = best(streets, lambda r: r["street"])
+    cross = best([c for c in crossish if c != street], lambda r: r["street"] + r["pair"])
+    if street and cross:
+        # the street column comes first in most tables ("Street, Cross"); keep the left one as the street
+        if order[cross] < order[street] and rep[cross]["pair"] == 0:
+            street, cross = cross, street
+        cross2 = best([c for c in streets if c not in (street, cross)], lambda r: r["street"])
+        out.update(mode="columns", street=street, cross=cross, cross2=cross2)
+    places = [c for c in columns if rep[c]["place"] >= 0.3]
+    out["column"] = best(places, lambda r: r["place"])
+    if out["mode"] == "column" and not out["column"]:
+        out["column"] = best([c for c in columns if rep[c]["filled"]], lambda r: r["place"] + r["pair"])
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("csv")
     ap.add_argument("--column", default="Block you want to party on")
     ap.add_argument("--data", default=os.path.join(ROOT, "data", "streets.json"))
+    ap.add_argument("--street", help="column with the street name, when streets are in separate columns")
+    ap.add_argument("--cross", help="column with the cross street (or two: \"Bush and Sutter\")")
+    ap.add_argument("--cross2", help="column with a second cross street, for a block between two")
     ap.add_argument("--out")
+    ap.add_argument("--suggest", action="store_true", help="look through the columns, say which hold streets or locations, and stop")
     a = ap.parse_args()
+    if bool(a.street) != bool(a.cross):
+        sys.exit("--street and --cross go together")
     st = Streets(*load(a.data))
-    rows = list(csv.DictReader(open(a.csv, newline="", encoding="utf-8-sig")))
-    if rows and a.column not in rows[0]:
-        sys.exit(f'column "{a.column}" not found; columns are: {list(rows[0])}')
+    src = open(a.csv, newline="", encoding="utf-8-sig")
+    reader = csv.DictReader(src)
+    fields = reader.fieldnames or []
+    if a.suggest:
+        g = suggest_columns(st, list(reader), fields)
+        for c in fields:
+            r = g["report"][c]
+            print(f"  {c[:30]:30}  filled {r['filled']:>3}  street names {r['street']:>4.0%}  two streets {r['pair']:>4.0%}  locations {r['place']:>4.0%}")
+        if g["mode"] == "columns":
+            print(f'suggest: --street "{g["street"]}" --cross "{g["cross"]}"' + (f' --cross2 "{g["cross2"]}"' if g["cross2"] else ""))
+        print(f'suggest: --column "{g["column"]}"' if g["column"] else "no column looks like locations")
+        return
+    need = [c for c in (a.street, a.cross, a.cross2) if c] if a.street else [a.column]
+    for c in need:
+        if fields and c not in fields:
+            sys.exit(f'column "{c}" not found; columns are: {fields}')
     out_path = a.out or re.sub(r"\.csv$", "", a.csv) + "_matched.csv"
-    extra = ["source_row", "part", "parts", "matched_text", "type", "cnn", "nearby_cnns", "street", "from_street", "to_street",
-             "address_low", "address_high", "address_ranges", "supervisor_district", "nhood", "wkt",
-             "confidence", "method", "notes"]
-    counts = defaultdict(int)
+    counts, n_rows = defaultdict(int), 0
     with open(out_path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0]) + extra if rows else extra)
+        w = csv.DictWriter(f, fieldnames=fields + OUT_FIELDS)
         w.writeheader()
-        for i, row in enumerate(rows, 1):
-            try:
-                text = row.get(a.column, "") or ""
-                results = parse(st, text)
-                cap = "low" if len(text) > 400 else "medium" if len(text) > 250 else None
-                for r in results:
-                    if cap and r["confidence"] in ("high", "medium") and r["confidence"] != cap and (cap == "low" or r["confidence"] == "high"):
-                        r["confidence"] = cap
-                        r["notes"].append("long description; check this is the main location")
-            except Exception as e:     # never lose a row
-                results = [result("none", [], "none", "", row.get(a.column, "")[:80], notes=[f"error: {e}"])]
-            for p, r in enumerate(results, 1):
-                segs = sorted({s["cnn"]: s for s in r["segs"]}.values(), key=lambda s: s["cnn"])
-                nodes = r.get("nodes", [])
-                nums = [n for s in segs for n in (*s["lf"], *s["rt"]) if n > 0]
-                if r["from_street"]:
-                    f_st, t_st = r["from_street"], r["to_street"]
-                else:
-                    f_st, t_st = (segs[0]["f"], segs[0]["t"]) if len(segs) == 1 else ("", "")
-                w.writerow({**row,
-                    "source_row": i, "part": p, "parts": len(results), "matched_text": r["text"],
-                    "type": "intersection" if nodes else ("block" if segs else ""),
-                    "cnn": ";".join(str(n) for n in nodes) if nodes else ";".join(str(s["cnn"]) for s in segs),
-                    "nearby_cnns": ";".join(str(s["cnn"]) for s in segs) if nodes else "",
-                    "street": r["street"],
-                    "from_street": f_st, "to_street": t_st,
-                    "address_low": min(nums) if nums else "", "address_high": max(nums) if nums else "",
-                    "address_ranges": "; ".join(ranges(s) for s in segs),
-                    "supervisor_district": ";".join(sorted({str(s["sup"]) for s in segs if s["sup"]})),
-                    "nhood": ";".join(sorted({s["nhood"] for s in segs if s["nhood"]})),
-                    "wkt": point_wkt([st.node_xy[n] for n in nodes if n in st.node_xy]) if nodes else wkt(segs),
-                    "confidence": r["confidence"], "method": r["method"],
-                    "notes": "; ".join(r["notes"])})
-                counts[r["confidence"]] += 1
-    print(f"wrote {out_path}: {len(rows)} input rows -> {sum(counts.values())} locations "
+        for i, row, outs in match_rows(st, reader, describer(a.column, a.street, a.cross, a.cross2)):
+            n_rows = i
+            for o in outs:
+                w.writerow({**row, **o})
+                counts[o["confidence"]] += 1
+    print(f"wrote {out_path}: {n_rows} input rows -> {sum(counts.values())} locations "
           + ", ".join(f"{k} {counts[k]}" for k in ("high", "medium", "low", "none")))
 
 
