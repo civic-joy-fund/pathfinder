@@ -2,6 +2,28 @@
 
 All changes are in `index.html` unless noted. `data/streets.json` and `scripts/build_data.py` are unchanged since v1.
 
+## v113
+
+- **Fixed: after picking a map style (Light, White, Gray…), no button in Layers ▾ worked** until a reload. Picking a style marked the whole page in a way that made the Layers menu treat every tap as a style pick. Pathfinder had the same bug.
+- **Tap the map to fold the map key.** On phones any tap on the map folds it; on computers a click on empty map does, so picking streets doesn't keep closing it. Its own toggle can end up under the toolbar.
+
+## v112
+
+- **Shoreline is a pill:** Off · 1850–52 · 1853 · 1857 · All.
+- **Sea level rise is one row with a pill:** Off · 24″ · 66″ · 108″, one at a time.
+- **The map key lists each one on its own line, with its own box:** each shoreline survey, and each sea level rise layer. Unchecking a survey hides just that one. Checking a second sea level rise layer in the key shows both, and the pill then shows neither pressed.
+- **Turning on the shoreline or Water in 1850–52 turns off Muni, OSM paths and bike lanes**, so the old shore is easier to see. They stay in the map key, unchecked, and checking them brings them back as they were. A note says so. Links that already have a historic layer on don't change anything.
+- Links from v111 (`shoreline:close`) open as All.
+
+## v111
+
+- **Shoreline and sea level**, a new section in Layers ▾, all off at first:
+  - **Shoreline 1850–1857**: NOAA's shoreline surveys as lines, blue for 1850–52, orange for 1853, green for 1857.
+  - **Water in 1850–52**: the water the 1850–52 survey shows, painted in the map's own water color under the streets, so land made since then (the Marina, the waterfront, Mission Bay, Islais Creek, India Basin) shows as water. Over today's bay it's the same color, so no edge shows. It follows the map style (Light, White, Gray…).
+  - **Sea level rise 24″** and **66″**, each with a 100-year storm (BCDC's Adapting to Rising Tides), as shaded areas, and SFPUC's **108″ zone** as a line. They come from sf-blocks.
+- Each has a row in the map key, and links keep which ones are on (`layers=`).
+
+
 ## v110
 
 - **Your files draw the way Airmapper does.** Each row now takes its shape column first, then its CNNs, then its latitude and longitude. A row with CNNs and lat/lon but no shape draws as its streets (and corners), not a dot. When there are no CNNs it falls back to the shape or the point. The rule comes from [airmapper-lib](https://github.com/burritojustice/airmapper-lib) (`geometryOf`), the same code Airmapper uses, loaded from jsDelivr with a copy in `vendor/airmapper-lib.js` in case jsDelivr is down.
